@@ -102,7 +102,17 @@ function parseCSV(fileBuffer) {
  * POST /api/upload
  * Upload CSV file and process transactions
  */
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: `File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB to keep the server stable. Use a smaller CSV or split your data.`,
+      });
+    }
+    if (err) return next(err);
+    next();
+  });
+}, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

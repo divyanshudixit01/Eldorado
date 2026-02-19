@@ -264,6 +264,21 @@ VITE_API_URL=http://localhost:5000/api
 5. Add environment variable:
    - `VITE_API_URL` - Your Render backend URL
 
+### Avoiding cold start (Render free tier)
+
+On the free tier, Render spins down your backend after ~15 minutes of no traffic. The next request can take 30–60 seconds to wake it (cold start). Two ways to reduce this:
+
+1. **In-app wake-up**  
+   The frontend already pings your backend’s `/health` endpoint before each upload when it detects a production URL (e.g. `*.onrender.com`). The first click may show “Waking server…” and then “Uploading…”. No extra setup.
+
+2. **Keep the server awake (optional)**  
+   Use a free uptime monitor to hit your backend every 10 minutes so it never sleeps:
+   - Go to [UptimeRobot](https://uptimerobot.com) (free) and create a monitor.
+   - **Monitor type:** HTTP(s).
+   - **URL:** `https://your-app-name.onrender.com/health` (your Render backend URL + `/health`).
+   - **Interval:** 5 minutes (or 10 minutes).
+   - Save. The server will stay warm and uploads will not wait on cold start.
+
 ## 📈 Performance
 
 ### Complexity Analysis

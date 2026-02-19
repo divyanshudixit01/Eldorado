@@ -3,9 +3,17 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+// Base URL of backend (no /api) for health check. Render free tier sleeps after ~15 min.
+function getHealthUrl() {
+  const base = (import.meta.env.VITE_API_URL || "http://localhost:5000/api")
+    .replace(/\/api\/?$/, "");
+  return `${base}/health`;
+}
+
 function Upload({ onUploadSuccess, onNotify }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [waking, setWaking] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
@@ -43,23 +51,38 @@ function Upload({ onUploadSuccess, onNotify }) {
     }
 
     setUploading(true);
+    setWaking(false);
     setError(null);
     setSuccess(false);
 
     const formData = new FormData();
     formData.append("file", file);
 
+    const healthUrl = getHealthUrl();
+    const isProduction = healthUrl.includes("render.com") || healthUrl.includes("herokuapp.com") || !healthUrl.includes("localhost");
+
     try {
+      // Cold start: ping health first so the server wakes before we send the file
+      if (isProduction) {
+        setWaking(true);
+        const wake = () => axios.get(healthUrl, { timeout: 35000 });
+        try {
+          await wake();
+        } catch (e) {
+          if (onNotify) onNotify({ type: "info", message: "Server waking up (free tier), retrying…" });
+          await new Promise((r) => setTimeout(r, 4000));
+          await wake();
+        }
+        setWaking(false);
+      }
+
       const response = await axios.post(`${API_URL}/upload`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
       });
 
       setSuccess(true);
-      if (onUploadSuccess) {
-        onUploadSuccess(response.data);
-      }
+      if (onUploadSuccess) onUploadSuccess(response.data);
       if (onNotify) {
         onNotify({
           type: "success",
@@ -69,9 +92,13 @@ function Upload({ onUploadSuccess, onNotify }) {
     } catch (err) {
       let message;
       if (!err.response) {
-        // Network error or wrong API URL (e.g. production build still pointing at localhost)
-        message =
-          "Cannot reach the server. Set VITE_API_URL to your backend URL in Vercel (e.g. your Render API URL) and redeploy.";
+        if (err.code === "ECONNABORTED") {
+          message =
+            "Request timed out. The server may be waking up—try again in a minute.";
+        } else {
+          message =
+            "Cannot reach the server. Set VITE_API_URL to your backend URL in Vercel and redeploy.";
+        }
       } else {
         message =
           err.response?.data?.error ||
@@ -79,11 +106,10 @@ function Upload({ onUploadSuccess, onNotify }) {
       }
       setError(message);
       setSuccess(false);
-      if (onNotify) {
-        onNotify({ type: "error", message });
-      }
+      if (onNotify) onNotify({ type: "error", message });
     } finally {
       setUploading(false);
+      setWaking(false);
     }
   };
 
@@ -167,7 +193,7 @@ function Upload({ onUploadSuccess, onNotify }) {
           disabled={!file || uploading}
           className="mt-1 inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition-transform duration-200 ease-in-out-soft hover:bg-primary-700 hover:scale-[1.02] disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
         >
-          {uploading ? "Uploading..." : "Upload & Analyze"}
+          {waking ? "Waking server…" : uploading ? "Uploading…" : "Upload & Analyze"}
         </button>
       </div>
 

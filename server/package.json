@@ -1,0 +1,24 @@
+{
+  "name": "money-muling-detection-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Money Muling Detection Engine",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["fraud", "detection", "graph", "money-muling"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^8.0.3",
+    "graphology": "^0.25.4",
+    "csv-parser": "^3.0.0",
+    "dayjs": "^1.11.10",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.3.1"
+  }
+}

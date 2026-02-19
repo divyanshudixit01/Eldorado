@@ -1,0 +1,273 @@
+import { useEffect, useRef, useState } from "react";
+import { DirectedGraph } from "graphology";
+import forceAtlas2 from "graphology-layout-forceatlas2";
+import Sigma from "sigma";
+import axios from "axios";
+
+// Use DirectedGraph from graphology
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+function GraphView({ data }) {
+  const containerRef = useRef(null);
+  const sigmaRef = useRef(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const fetchGraphData = async () => {
+      try {
+        console.log("GraphView: Fetching graph data from", API_URL);
+        const response = await axios.get(`${API_URL}/graph`);
+        const { nodes, edges } = response.data;
+        console.log(
+          "GraphView: Received",
+          nodes.length,
+          "nodes,",
+          edges.length,
+          "edges",
+        );
+
+        if (nodes.length === 0) {
+          console.log("GraphView: No nodes, loading complete");
+          setLoading(false);
+          return;
+        }
+
+        // Create graphology directed graph
+        const graph = new DirectedGraph();
+
+        // Add nodes
+        nodes.forEach((node) => {
+          graph.addNode(node.id, {
+            label: node.label,
+            size: node.size,
+            color: node.color,
+            ring_id: node.ring_id,
+            in_degree: node.in_degree,
+            out_degree: node.out_degree,
+            suspicion_score: node.suspicion_score,
+            x: Math.random() * 1000,
+            y: Math.random() * 1000,
+          });
+        });
+
+        // Add edges
+        edges.forEach((edge) => {
+          if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
+            graph.addEdge(edge.source, edge.target, {
+              size: edge.size,
+              color: edge.color,
+            });
+          }
+        });
+
+        // Apply ForceAtlas2 layout (try multiple APIs, fall back to random positions)
+        try {
+          console.log("GraphView: Attempting ForceAtlas2 layout...");
+          if (typeof forceAtlas2.assign === "function") {
+            console.log("GraphView: Using forceAtlas2.assign()");
+            // Preferred API: mutates graph node attributes directly
+            forceAtlas2.assign(graph, {
+              iterations: 100,
+              settings: {
+                gravity: 0.5,
+                strongGravityMode: false,
+                outboundAttractionDistribution: true,
+                linLogMode: false,
+                adjustSizes: true,
+                edgeWeightInfluence: 1,
+                scalingRatio: 1,
+                slowDown: 1,
+              },
+            });
+          } else if (typeof forceAtlas2 === "function") {
+            console.log("GraphView: Using forceAtlas2() function");
+            // Some builds return positions map
+            const positions = forceAtlas2(graph, {
+              iterations: 100,
+              settings: {
+                gravity: 0.5,
+                strongGravityMode: false,
+                outboundAttractionDistribution: true,
+                linLogMode: false,
+                adjustSizes: true,
+                edgeWeightInfluence: 1,
+                scalingRatio: 1,
+                slowDown: 1,
+              },
+            });
+
+            if (positions && typeof positions === "object") {
+              graph.forEachNode((node) => {
+                const pos = positions[node] || {
+                  x: Math.random() * 1000,
+                  y: Math.random() * 1000,
+                };
+                graph.setNodeAttribute(node, "x", pos.x);
+                graph.setNodeAttribute(node, "y", pos.y);
+              });
+            }
+          }
+          console.log("GraphView: ForceAtlas2 layout complete");
+        } catch (faErr) {
+          // If layout fails, assign random positions to avoid blocking render
+          console.warn(
+            "GraphView: ForceAtlas2 failed, using random positions:",
+            faErr,
+          );
+          graph.forEachNode((node) => {
+            graph.setNodeAttribute(node, "x", Math.random() * 1000);
+            graph.setNodeAttribute(node, "y", Math.random() * 1000);
+          });
+        }
+
+        // Initialize Sigma (try container-first constructor, fallback to graph-first)
+        let sigma = null;
+        try {
+          console.log(
+            "GraphView: Initializing Sigma with container-first signature",
+          );
+          sigma = new Sigma(containerRef.current, graph, {
+            renderLabels: false,
+            defaultNodeColor: "#3b82f6",
+            defaultEdgeColor: "#94a3b8",
+            minCameraRatio: 0.1,
+            maxCameraRatio: 10,
+            labelFont: "Arial",
+            labelSize: 12,
+            labelWeight: "bold",
+          });
+          console.log(
+            "GraphView: Sigma initialized successfully (container-first)",
+          );
+        } catch (err) {
+          console.warn(
+            "GraphView: Container-first failed, trying graph-first signature:",
+            err,
+          );
+          // Fallback to alternative signature
+          sigma = new Sigma(graph, containerRef.current, {
+            renderLabels: false,
+            defaultNodeColor: "#3b82f6",
+            defaultEdgeColor: "#94a3b8",
+            minCameraRatio: 0.1,
+            maxCameraRatio: 10,
+            labelFont: "Arial",
+            labelSize: 12,
+            labelWeight: "bold",
+          });
+          console.log(
+            "GraphView: Sigma initialized successfully (graph-first)",
+          );
+        }
+
+        // Handle node hover
+        sigma.on("enterNode", ({ node }) => {
+          setHoveredNode(node);
+          sigma.getGraph().setNodeAttribute(node, "highlighted", true);
+        });
+
+        sigma.on("leaveNode", ({ node }) => {
+          setHoveredNode(null);
+          sigma.getGraph().setNodeAttribute(node, "highlighted", false);
+        });
+
+        // Handle node click
+        sigma.on("clickNode", ({ node }) => {
+          const nodeData = sigma.getGraph().getNodeAttributes(node);
+          console.log("Node clicked:", nodeData);
+        });
+
+        sigmaRef.current = sigma;
+        setLoading(false);
+
+        // Cleanup
+        return () => {
+          if (sigmaRef.current) {
+            sigmaRef.current.kill();
+            sigmaRef.current = null;
+          }
+        };
+      } catch (error) {
+        console.error("GraphView: Error fetching/rendering graph data:", error);
+        console.error("GraphView: Error stack:", error.stack);
+        setLoading(false);
+      }
+    };
+
+    fetchGraphData();
+  }, [data]);
+
+  const nodeData =
+    hoveredNode && sigmaRef.current
+      ? sigmaRef.current.getGraph().getNodeAttributes(hoveredNode)
+      : null;
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6">
+      <h2 className="text-2xl font-bold text-gray-800 mb-4">
+        Transaction Graph Visualization
+      </h2>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      ) : (
+        <>
+          <div
+            ref={containerRef}
+            className="w-full h-96 border border-gray-200 rounded-lg bg-gray-50"
+            style={{ minHeight: "400px" }}
+          />
+
+          {nodeData && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="font-semibold text-blue-900 mb-2">Node Details</h3>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="font-medium">Account ID:</span>{" "}
+                  {nodeData.label}
+                </div>
+                <div>
+                  <span className="font-medium">In-Degree:</span>{" "}
+                  {nodeData.in_degree}
+                </div>
+                <div>
+                  <span className="font-medium">Out-Degree:</span>{" "}
+                  {nodeData.out_degree}
+                </div>
+                <div>
+                  <span className="font-medium">Suspicion Score:</span>{" "}
+                  {nodeData.suspicion_score || 0}
+                </div>
+                {nodeData.ring_id && (
+                  <div className="col-span-2">
+                    <span className="font-medium">Ring ID:</span>{" "}
+                    {nodeData.ring_id}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+              <span>Normal Account</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-red-500 rounded-full"></div>
+              <span>Suspicious Account</span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default GraphView;

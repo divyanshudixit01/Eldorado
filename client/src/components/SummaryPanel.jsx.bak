@@ -1,0 +1,66 @@
+function SummaryPanel({ summary, onDownload }) {
+  if (!summary) {
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">Summary</h2>
+        <p className="text-gray-600">Upload a CSV file to see analysis results.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-gray-800">Analysis Summary</h2>
+        {onDownload && (
+          <button
+            onClick={onDownload}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+          >
+            Download JSON
+          </button>
+        )}
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+          <div className="text-sm text-blue-600 font-medium mb-1">
+            Total Accounts Analyzed
+          </div>
+          <div className="text-3xl font-bold text-blue-900">
+            {summary.total_accounts_analyzed || 0}
+          </div>
+        </div>
+        
+        <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+          <div className="text-sm text-red-600 font-medium mb-1">
+            Suspicious Accounts Flagged
+          </div>
+          <div className="text-3xl font-bold text-red-900">
+            {summary.suspicious_accounts_flagged || 0}
+          </div>
+        </div>
+        
+        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+          <div className="text-sm text-orange-600 font-medium mb-1">
+            Fraud Rings Detected
+          </div>
+          <div className="text-3xl font-bold text-orange-900">
+            {summary.fraud_rings_detected || 0}
+          </div>
+        </div>
+        
+        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+          <div className="text-sm text-green-600 font-medium mb-1">
+            Processing Time
+          </div>
+          <div className="text-3xl font-bold text-green-900">
+            {summary.processing_time_seconds?.toFixed(2) || '0.00'}s
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default SummaryPanel;

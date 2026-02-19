@@ -27,20 +27,31 @@ echo Committing changes...
 git commit -m "Initial commit: Money Muling Detection System"
 echo.
 
-REM Check if remote exists
+REM Check if remote exists and is not the placeholder
+git remote get-url origin 2>nul | findstr /C:"your-username" /C:"your-repo" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo.
+    echo ========================================
+    echo Set your GitHub repository URL first
+    echo ========================================
+    echo.
+    echo 1. Create a new repo at https://github.com/new
+    echo 2. Run this with YOUR username and repo name:
+    echo    git remote set-url origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+    echo.
+    echo 3. Run this script again to push.
+    echo.
+    goto :eof
+)
 git remote -v >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo ========================================
-    echo IMPORTANT: Set your GitHub repository URL
+    echo IMPORTANT: Add your GitHub repository
     echo ========================================
     echo.
-    echo Run this command with YOUR repository URL:
-    echo git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-    echo.
-    echo Then run:
-    echo git branch -M main
-    echo git push -u origin main
+    echo Run: git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+    echo Then run this script again.
     echo.
 ) else (
     echo.

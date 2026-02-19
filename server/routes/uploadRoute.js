@@ -23,50 +23,66 @@ function parseCSV(fileBuffer) {
     const results = [];
     const requiredColumns = ['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp'];
     let headers = null;
-    
-    const stream = Readable.from(fileBuffer.toString());
-    
+    let headerMap = null; // lowercase header name -> actual key in data
+
+    // Normalize to UTF-8 and strip BOM (Excel/some exports add BOM)
+    let text = fileBuffer.toString('utf8');
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    const stream = Readable.from(text);
+
     stream
-      .pipe(csv())
+      .pipe(csv({ skipLines: 0 }))
       .on('headers', (headerList) => {
-        headers = headerList;
-        // Validate headers
-        const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+        headers = headerList.map(h => (h && h.trim ? h.trim() : h));
+        const lowerSet = new Set(headers.map(h => h.toLowerCase()));
+        const missingColumns = requiredColumns.filter(col => !lowerSet.has(col));
         if (missingColumns.length > 0) {
           reject(new Error(`Missing required columns: ${missingColumns.join(', ')}`));
           return;
         }
+        headerMap = {};
+        headers.forEach(h => { headerMap[h.toLowerCase()] = h; });
       })
       .on('data', (data) => {
-        // Validate row data
-        const missingFields = requiredColumns.filter(col => !data[col] || data[col].trim() === '');
+        const get = (col) => {
+          const key = headerMap ? headerMap[col] || col : col;
+          const val = data[key];
+          return val != null ? String(val).trim() : '';
+        };
+        const missingFields = requiredColumns.filter(col => !get(col));
         if (missingFields.length > 0) {
           return; // Skip invalid rows
         }
-        
+
+        const transaction_id = get('transaction_id');
+        const sender_id = get('sender_id');
+        const receiver_id = get('receiver_id');
+        const timestampStr = get('timestamp');
+        const amountStr = get('amount');
+
         // Parse timestamp (YYYY-MM-DD HH:MM:SS)
         let timestamp;
         try {
-          timestamp = dayjs(data.timestamp, 'YYYY-MM-DD HH:mm:ss').toDate();
+          timestamp = dayjs(timestampStr, 'YYYY-MM-DD HH:mm:ss').toDate();
           if (!timestamp || isNaN(timestamp.getTime())) {
             return; // Skip invalid timestamp
           }
         } catch (error) {
           return; // Skip invalid timestamp
         }
-        
+
         // Parse amount
-        const amount = parseFloat(data.amount);
+        const amount = parseFloat(amountStr);
         if (isNaN(amount)) {
           return; // Skip invalid amount
         }
-        
+
         results.push({
-          transaction_id: data.transaction_id.trim(),
-          sender_id: data.sender_id.trim(),
-          receiver_id: data.receiver_id.trim(),
-          amount: amount,
-          timestamp: timestamp
+          transaction_id,
+          sender_id,
+          receiver_id,
+          amount,
+          timestamp
         });
       })
       .on('end', () => {

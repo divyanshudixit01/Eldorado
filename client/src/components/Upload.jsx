@@ -67,9 +67,16 @@ function Upload({ onUploadSuccess, onNotify }) {
         });
       }
     } catch (err) {
-      const message =
-        err.response?.data?.error ||
-        "Failed to upload file. Please check the CSV format.";
+      let message;
+      if (!err.response) {
+        // Network error or wrong API URL (e.g. production build still pointing at localhost)
+        message =
+          "Cannot reach the server. Set VITE_API_URL to your backend URL in Vercel (e.g. your Render API URL) and redeploy.";
+      } else {
+        message =
+          err.response?.data?.error ||
+          "Failed to upload file. Please check the CSV format.";
+      }
       setError(message);
       setSuccess(false);
       if (onNotify) {
